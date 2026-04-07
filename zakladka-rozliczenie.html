@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rozliczenie — MrFrik</title>
+  <script src="//api.bitrix24.com/api/v1/"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    :root {
+      --blue: #2fc6f6;
+      --blue-dark: #0b66c2;
+      --bg: #f5f7fa;
+      --card: #fff;
+      --border: #e0e4ea;
+      --text: #333;
+      --text-muted: #888;
+      --green: #34b251;
+      --orange: #f0a020;
+      --red: #e53935;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 12px 16px;
+      line-height: 1.4;
+      font-size: 13px;
+    }
+    h1 { font-size: 18px; font-weight: 600; margin-bottom: 10px; color: var(--blue-dark); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+    }
+    .card h2 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--blue-dark);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--blue);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 10px;
+    }
+    .row:last-child { margin-bottom: 0; }
+    .row label { flex: 0 0 180px; font-size: 13px; font-weight: 500; }
+    .row .val { flex: 1; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    input[type="number"], input[type="text"], select {
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 5px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text);
+      background: #fff;
+      outline: none;
+      transition: border-color 0.2s;
+      width: 160px;
+    }
+    input:focus, select:focus { border-color: var(--blue); }
+    select { cursor: pointer; width: 100%; max-width: 460px; }
+    .suf { font-size: 12px; color: var(--text-muted); }
+    .hint { font-size: 11px; color: var(--text-muted); width: 100%; }
+    .hint.calc { color: var(--blue-dark); font-style: italic; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge.iaai { background: #fff3cd; color: #856404; }
+    .badge.copart { background: #d4edda; color: #155724; }
+    .badge.unknown { background: #e9ecef; color: #6c757d; }
+    .rbox {
+      background: #f0f8ff;
+      border: 1px solid #cde4f7;
+      border-radius: 6px;
+      padding: 8px 14px;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .rbox .rl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); flex: 0 0 auto; }
+    .rbox .rv { font-size: 18px; font-weight: 700; color: var(--blue-dark); }
+    .rbox.orange { background: #fff8e8; border-color: #f0d89a; }
+    .rbox.orange .rv { color: var(--orange); }
+    .rbox.green { background: #eef8ee; border-color: #b5deb5; }
+    .rbox.green .rv { color: var(--green); }
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .summary-grid .rbox { flex-direction: column; align-items: flex-start; gap: 2px; }
+    .total-box {
+      margin-top: 8px;
+      background: #eee;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .total-box .rl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); }
+    .total-box .rv { font-size: 22px; font-weight: 700; color: var(--red); }
+    /* Gear button / tier panel */
+    .gear-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 2px 6px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      color: var(--text-muted);
+      transition: all 0.2s;
+    }
+    .gear-btn:hover { background: var(--bg); color: var(--text); }
+    .tier-panel {
+      display: none;
+      background: #fafbfc;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+    .tier-panel.open { display: block; }
+    .tier-panel h3 { font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); }
+    .tier-row {
+      display: grid;
+      grid-template-columns: 140px 120px 30px;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+    .tier-row input {
+      width: 100%;
+      padding: 3px 6px;
+      font-size: 12px;
+    }
+    .tier-row .tier-label { color: var(--text-muted); }
+    .tier-row .tier-unit { font-size: 11px; color: var(--text-muted); }
+    .tier-row.active-tier { background: #eaf8ff; border-radius: 4px; padding: 2px 4px; }
+    /* NBP rate */
+    .rate-wrap { display: flex; align-items: center; gap: 6px; }
+    .rate-src { font-size: 10px; color: var(--text-muted); }
+    /* Inline edit toggle */
+    .read-val { font-weight: 600; font-size: 14px; }
+    .edit-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 1px 6px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: all 0.2s;
+      line-height: 1;
+    }
+    .edit-btn:hover { background: var(--bg); color: var(--text); }
+    .rate-refresh {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--blue-dark);
+      padding: 2px;
+      line-height: 1;
+    }
+    .rate-refresh:hover { color: var(--blue); }
+    .loading { text-align: center; padding: 20px; color: var(--text-muted); }
+    .mock-banner {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 6px;
+      padding: 6px 12px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: #856404;
+    }
+    .no-offers { color: var(--text-muted); font-style: italic; padding: 6px 0; }
+    /* PDF extraction */
+    .pdf-status { font-size: 12px; padding: 6px 10px; border-radius: 5px; margin-top: 4px; }
+    .pdf-status.loading { background: #e8f4fd; color: #0b66c2; }
+    .pdf-status.success { background: #eef8ee; color: #34b251; }
+    .pdf-status.warning { background: #fff8e8; color: #b8860b; }
+    .pdf-status.error { background: #fdecea; color: #e53935; }
+    .pdf-confirm-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .pdf-confirm-row input { width: 140px; }
+    .btn-sm {
+      padding: 4px 12px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--blue);
+      color: #fff;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-sm:hover { background: var(--blue-dark); }
+    .btn-sm.secondary { background: #fff; color: var(--text); }
+    .btn-sm.secondary:hover { background: var(--bg); }
+    @media (max-width: 600px) {
+      .row { flex-direction: column; align-items: flex-start; gap: 3px; }
+      .row label { flex: none; }
+      .summary-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <h1>Rozliczenie transakcji</h1>
+  <div id="mockBanner" class="mock-banner" style="display:none;">
+    ⚠ Tryb demo — dane testowe. Podłącz webhook, aby korzystać z danych CRM.
+  </div>
+
+  <!-- OFERTA + ŹRÓDŁO -->
+  <div class="card">
+    <h2>Oferta i źródło aukcji</h2>
+    <div id="offerLoading" class="loading">Ładowanie ofert…</div>
+    <div id="offerContent" style="display:none;">
+      <div id="offerNoOffers" class="no-offers" style="display:none;">Brak zaakceptowanych ofert.</div>
+      <div id="offerSelection" style="display:none;">
+        <div class="row">
+          <label for="offerSelect">Oferta:</label>
+          <div class="val"><select id="offerSelect"></select></div>
+        </div>
+      </div>
+      <div id="offerDetails" style="display:none;">
+        <div class="row">
+          <label>Kwota licytacji:</label>
+          <div class="val">
+            <strong id="auctionPriceDisplay">—</strong> <span class="suf">USD</span>
+          </div>
+        </div>
+        <div class="row">
+          <label>Platforma:</label>
+          <div class="val">
+            <span id="auctionSourceBadge" class="badge unknown">—</span>
+            <span id="auctionSourcePercent" class="suf"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEPOZYT / WYRÓWNANIE -->
+  <div class="card">
+    <h2>Depozyt i wyrównanie</h2>
+    <div class="row">
+      <label>Wpłacony zadatek:</label>
+      <div class="val">
+        <span class="read-val" id="depositDisplay">3 000 PLN</span>
+        <input type="number" id="depositPaid" value="3000" min="0" step="100" style="display:none;">
+        <span class="suf" id="depositSuf" style="display:none;">PLN</span>
+        <button class="edit-btn" id="depositEditBtn" title="Edytuj zadatek">&#9998;</button>
+      </div>
+    </div>
+    <div class="row">
+      <label>Kurs USD/PLN:</label>
+      <div class="val rate-wrap">
+        <input type="number" id="usdPlnRate" value="4.05" min="0" step="0.01" style="width:100px;">
+        <button class="rate-refresh" id="rateRefreshBtn" title="Pobierz kurs z NBP">&#x21bb;</button>
+        <span class="rate-src" id="rateSrcHint"></span>
+      </div>
+    </div>
+    <div class="row">
+      <label>Wymagany depozyt:</label>
+      <div class="val">
+        <span id="requiredDepositUsd">—</span> <span class="suf">USD</span>
+        &nbsp;=&nbsp;
+        <strong id="requiredDepositPln">—</strong> <span class="suf">PLN</span>
+        <span class="hint" id="depositPercentHint"></span>
+      </div>
+    </div>
+    <div class="row">
+      <label for="equalizationAmount">Wyrównanie:</label>
+      <div class="val">
+        <input type="number" id="equalizationAmount" value="0" min="0" step="100">
+        <span class="suf">PLN</span>
+        <span class="hint calc" id="equalizationHint" style="display:none;"></span>
+      </div>
+    </div>
+    <div class="rbox orange">
+      <span class="rl">Klient dopłaca →</span>
+      <span class="rv" id="equalizationResult">— PLN</span>
+    </div>
+  </div>
+
+  <!-- PROWIZJA -->
+  <div class="card">
+    <h2>Prowizja <button class="gear-btn" id="tierToggle" title="Pokaż/edytuj progi prowizji">&#9881;</button></h2>
+    <div class="tier-panel" id="tierPanel">
+      <h3>Progi prowizji</h3>
+      <div id="tierRows"></div>
+      <div style="margin-top:6px; font-size:11px; color:var(--text-muted);">
+        Zmiany zapisywane w polu Deal.
+      </div>
+    </div>
+    <!-- PDF extraction -->
+    <div id="pdfSection" style="margin-bottom:10px;">
+      <div class="row">
+        <label>Plik wyliczenia:</label>
+        <div class="val">
+          <a id="pdfFileName" href="#" target="_blank" style="font-size:12px; color:var(--text-muted); text-decoration:none; pointer-events:none;">Brak pliku</a>
+          <span id="pdfStatusMsg" class="pdf-status" style="display:none;"></span>
+        </div>
+      </div>
+      <div id="pdfConfirm" style="display:none;">
+        <div class="pdf-confirm-row">
+          <span style="font-size:12px;">Odczytana kwota:</span>
+          <input type="number" id="pdfExtractedAmount" min="0" step="100">
+          <span class="suf">USD</span>
+          <button class="btn-sm" id="pdfAcceptBtn">Zatwierdź</button>
+          <button class="btn-sm secondary" id="pdfRejectBtn">Odrzuć</button>
+        </div>
+      </div>
+      <div id="pdfManualEntry" style="display:none;">
+        <div class="pdf-confirm-row">
+          <span style="font-size:12px;">Nie wykryto kwoty. Wpisz ręcznie:</span>
+          <input type="number" id="pdfManualAmount" min="0" step="100" placeholder="Kwota USD">
+          <span class="suf">USD</span>
+          <button class="btn-sm" id="pdfManualAcceptBtn">Zatwierdź</button>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <label for="winningBid">Wygrana licytacja:</label>
+      <div class="val">
+        <input type="number" id="winningBid" value="0" min="0" step="100">
+        <span class="suf">USD</span>
+        <span class="hint" id="winningBidSource" style="display:none;"></span>
+      </div>
+    </div>
+    <div class="row">
+      <label for="commissionAmount">Prowizja:</label>
+      <div class="val">
+        <input type="number" id="commissionAmount" value="0" min="0" step="100">
+        <span class="suf">PLN</span>
+        <span class="hint calc" id="commissionHint" style="display:none;"></span>
+      </div>
+    </div>
+    <div class="rbox green">
+      <span class="rl">Prowizja →</span>
+      <span class="rv" id="commissionResult">— PLN</span>
+    </div>
+  </div>
+
+  <!-- PODSUMOWANIE -->
+  <div class="card">
+    <h2>Podsumowanie</h2>
+    <div class="summary-grid">
+      <div class="rbox"><span class="rl">Zadatek</span><span class="rv" id="sumDeposit">—</span></div>
+      <div class="rbox orange"><span class="rl">Wyrównanie</span><span class="rv" id="sumEqualization">—</span></div>
+      <div class="rbox green"><span class="rl">Prowizja</span><span class="rv" id="sumCommission">—</span></div>
+    </div>
+    <div class="total-box">
+      <span class="rl">Razem do dopłaty</span>
+      <span class="rv" id="sumTotal">— PLN</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  KONFIGURACJA
+// ============================================================
+var CONFIG = {
+  MOCK_MODE: true,
+
+  // ---- Pola ofert (quotes) ----
+  // Szacowana kwota licytacji (money) → do obliczenia depozytu
+  QUOTE_EST_PRICE_FIELD: 'UF_CRM_QUOTE_1749798603485',
+  // Kwota wygranej licytacji (double) → do prowizji
+  QUOTE_WINNING_PRICE_FIELD: 'OPPORTUNITY',
+  // Strona licytacji (enum): 3089=IAAI, 3091=Copart
+  QUOTE_SOURCE_FIELD: 'UF_CRM_QUOTE_1775199244953',
+  SOURCE_ENUM_IAAI: '3089',
+  SOURCE_ENUM_COPART: '3091',
+  // Etap oferty: akceptacja → depozyt, wygrana → prowizja
+  QUOTE_STAGE_ACCEPTED: 'UC_4WW38O',   // Akceptacja
+  QUOTE_STAGE_WON: 'APPROVED',          // Wygrana Licytacja
+
+  // ---- Pola Deal ----
+  DEAL_DEPOSIT_FIELD: 'UF_CRM_1772037042349',       // Kwota Zadatku (double)
+  DEAL_EQUALIZATION_FIELD: 'UF_CRM_1775558945945',  // Dopłata do Zadatku (double)
+  DEAL_FILE_FIELD: 'UF_CRM_1769760464535',           // Wyliczenie - po licytacji plik (file)
+  DEAL_TIERS_FIELD: 'UF_CRM_1775558965969',         // Progi prowizji (string/json)
+
+  DEFAULT_DEPOSIT: 3000,
+  DEPOSIT_IAAI_PERCENT: 15,
+  DEPOSIT_COPART_PERCENT: 10,
+
+  // Domyślne progi prowizji
+  DEFAULT_TIERS: [
+    { max: 6000,     fee: 2500,  label: 'do 6k $' },
+    { max: 15000,    fee: 3000,  label: '6–15k $' },
+    { max: 25000,    fee: 3500,  label: '15–25k $' },
+    { max: 35000,    fee: 4000,  label: '25–35k $' },
+    { max: 45000,    fee: 4500,  label: '35–45k $' },
+    { max: Infinity, percent: 2.7, label: '> 45k $' }
+  ]
+};
+
+// MOCK
+var MOCK_OFFERS = [
+  { id: 101, title: 'Toyota Camry 2021 — IAAI #34221',  estPrice: 12500, winPrice: 11800, source: 'iaai',   stage: 'won' },
+  { id: 102, title: 'Honda Civic 2020 — Copart #88412', estPrice: 8200,  winPrice: 0,     source: 'copart', stage: 'accepted' },
+  { id: 103, title: 'Ford Mustang 2019 — IAAI #55103',  estPrice: 28000, winPrice: 0,     source: 'iaai',   stage: 'accepted' }
+];
+
+// ============================================================
+//  STATE
+// ============================================================
+var state = {
+  dealId: null,
+  offers: [],
+  selectedOffer: null,
+  auctionSource: '',        // 'iaai' | 'copart' | ''
+  depositPaid: CONFIG.DEFAULT_DEPOSIT,
+  usdPlnRate: 4.05,
+  auctionPriceUsd: 0,       // szacowana kwota licytacji (z oferty) → depozyt
+  winningBidUsd: 0,          // kwota wygranej licytacji (OPPORTUNITY) → prowizja
+  winningBidFromCrm: false,  // czy kwota wygranej pobrana z CRM
+  equalizationCalc: 0,
+  equalizationManual: null,
+  commissionCalc: 0,
+  commissionManual: null,
+  tiers: JSON.parse(JSON.stringify(CONFIG.DEFAULT_TIERS))
+};
+
+// ============================================================
+//  B24 API — wrapper na BX24.callMethod (SDK w iframe)
+// ============================================================
+function b24(method, params) {
+  return new Promise(function(resolve, reject) {
+    BX24.callMethod(method, params || {}, function(result) {
+      if (result.error()) {
+        reject(new Error(result.error().ex.error_description || result.error()));
+        return;
+      }
+      resolve(result.data());
+    });
+  });
+}
+
+// ============================================================
+//  NBP RATE
+// ============================================================
+function fetchNbpRate() {
+  var hint = document.getElementById('rateSrcHint');
+  hint.textContent = 'pobieranie…';
+  return fetch('https://api.nbp.pl/api/exchangerates/rates/a/usd/?format=json')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var rate = data.rates[0].mid;
+      var date = data.rates[0].effectiveDate;
+      state.usdPlnRate = rate;
+      document.getElementById('usdPlnRate').value = rate;
+      hint.textContent = 'NBP ' + date;
+      state.equalizationManual = null;
+      state.commissionManual = null;
+      updateUI();
+    })
+    .catch(function() {
+      hint.textContent = 'błąd pobierania';
+    });
+}
+
+// ============================================================
+//  OFFERS
+// ============================================================
+function loadOffers() {
+  if (CONFIG.MOCK_MODE) {
+    document.getElementById('mockBanner').style.display = 'block';
+    return Promise.resolve(MOCK_OFFERS);
+  }
+  if (!state.dealId) return Promise.resolve([]);
+
+  // Pobierz oferty w etapie Akceptacja LUB Wygrana Licytacja
+  return b24('crm.quote.list', {
+    filter: {
+      DEAL_ID: state.dealId,
+      STATUS_ID: [CONFIG.QUOTE_STAGE_ACCEPTED, CONFIG.QUOTE_STAGE_WON]
+    },
+    select: ['ID', 'TITLE', 'STATUS_ID',
+             CONFIG.QUOTE_EST_PRICE_FIELD,
+             CONFIG.QUOTE_WINNING_PRICE_FIELD,
+             CONFIG.QUOTE_SOURCE_FIELD].filter(Boolean)
+  }).then(function(res) {
+    return (res || []).map(function(q) {
+      // Odczyt źródła aukcji z enum
+      var srcRaw = q[CONFIG.QUOTE_SOURCE_FIELD] || '';
+      var src = '';
+      if (srcRaw == CONFIG.SOURCE_ENUM_IAAI) src = 'iaai';
+      else if (srcRaw == CONFIG.SOURCE_ENUM_COPART) src = 'copart';
+
+      // Szacowana kwota — pole money zwraca "kwota|waluta" lub liczbę
+      var estRaw = q[CONFIG.QUOTE_EST_PRICE_FIELD] || '';
+      var estPrice = 0;
+      if (typeof estRaw === 'string' && estRaw.indexOf('|') !== -1) {
+        estPrice = parseFloat(estRaw.split('|')[0]) || 0;
+      } else {
+        estPrice = parseFloat(estRaw) || 0;
+      }
+
+      var isWon = q.STATUS_ID === CONFIG.QUOTE_STAGE_WON;
+      return {
+        id: q.ID,
+        title: q.TITLE || 'Oferta #' + q.ID,
+        estPrice: estPrice,
+        winPrice: isWon ? (parseFloat(q[CONFIG.QUOTE_WINNING_PRICE_FIELD]) || 0) : 0,
+        source: src,
+        stage: isWon ? 'won' : 'accepted'
+      };
+    });
+  });
+}
+
+// ============================================================
+//  TIERS — load/save from deal text field
+// ============================================================
+function loadDealData() {
+  if (!state.dealId || CONFIG.MOCK_MODE) return Promise.resolve();
+  return b24('crm.deal.get', { id: state.dealId }).then(function(deal) {
+    // Kwota zadatku
+    var dep = parseFloat(deal[CONFIG.DEAL_DEPOSIT_FIELD]) || 0;
+    if (dep > 0) {
+      state.depositPaid = dep;
+      document.getElementById('depositPaid').value = dep;
+    }
+
+    // Progi prowizji
+    var raw = deal[CONFIG.DEAL_TIERS_FIELD];
+    if (raw) {
+      try {
+        var parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          state.tiers = parsed.map(function(t) {
+            return { max: t.max === null ? Infinity : t.max, fee: t.fee, percent: t.percent, label: t.label };
+          });
+          renderTierPanel();
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    // Plik wyliczenia (PDF)
+    var fileData = deal[CONFIG.DEAL_FILE_FIELD];
+    if (fileData && fileData.downloadUrl) {
+      processPdfFromDeal(fileData);
+    }
+
+    updateUI();
+  }).catch(function(e) { console.error('Deal load error:', e); });
+}
+
+function saveTiersToDeal() {
+  if (!CONFIG.DEAL_TIERS_FIELD || !state.dealId || CONFIG.MOCK_MODE) return;
+  var data = state.tiers.map(function(t) {
+    return { max: t.max === Infinity ? null : t.max, fee: t.fee, percent: t.percent, label: t.label };
+  });
+  var fields = {};
+  fields[CONFIG.DEAL_TIERS_FIELD] = JSON.stringify(data);
+  b24('crm.deal.update', { id: state.dealId, fields: fields }).catch(function(e) {
+    console.error('Tier save error:', e);
+  });
+}
+
+// Zapis dopłaty do deal
+function saveEqualizationToDeal(amount) {
+  if (!CONFIG.DEAL_EQUALIZATION_FIELD || !state.dealId || CONFIG.MOCK_MODE) return;
+  var fields = {};
+  fields[CONFIG.DEAL_EQUALIZATION_FIELD] = amount;
+  b24('crm.deal.update', { id: state.dealId, fields: fields }).catch(function(e) {
+    console.error('Equalization save error:', e);
+  });
+}
+
+// ============================================================
+//  PDF EXTRACTION — odczyt kwoty z pliku wyliczenia
+// ============================================================
+function setPdfStatus(type, msg) {
+  var el = document.getElementById('pdfStatusMsg');
+  el.className = 'pdf-status ' + type;
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+function processPdfFromDeal(fileData) {
+  var nameEl = document.getElementById('pdfFileName');
+  nameEl.textContent = 'plik #' + fileData.id;
+  setPdfStatus('loading', 'Analizowanie PDF…');
+
+  // Buduj pełny URL do pliku — downloadUrl jest relatywny
+  var domain = '';
+  if (typeof BX24 !== 'undefined' && BX24.getDomain) {
+    domain = 'https://' + BX24.getDomain();
+  }
+  var url = domain + fileData.downloadUrl;
+
+  // Dodaj auth token z BX24
+  if (typeof BX24 !== 'undefined' && BX24.getAuth) {
+    var auth = BX24.getAuth();
+    if (auth && auth.access_token) {
+      url = url.replace('auth=', 'auth=' + auth.access_token);
+    }
+  }
+
+  // Plik klikalny — otwórz w nowej karcie
+  var showUrl = domain + (fileData.showUrl || fileData.downloadUrl);
+  nameEl.href = showUrl;
+  nameEl.style.pointerEvents = 'auto';
+  nameEl.style.color = '#0070c9';
+  nameEl.style.textDecoration = 'underline';
+
+  fetchAndParsePdf(url);
+}
+
+function fetchAndParsePdf(url) {
+  // pdf.js worker
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  fetch(url)
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.arrayBuffer();
+    })
+    .then(function(buffer) {
+      return pdfjsLib.getDocument({ data: buffer }).promise;
+    })
+    .then(function(pdf) {
+      return extractTextFromPdf(pdf);
+    })
+    .then(function(text) {
+      var amount = findAmountInText(text);
+      if (amount !== null) {
+        showPdfConfirm(amount);
+      } else {
+        showPdfManualEntry();
+      }
+    })
+    .catch(function(err) {
+      console.error('PDF error:', err);
+      setPdfStatus('error', 'Błąd odczytu PDF');
+      showPdfManualEntry();
+    });
+}
+
+function extractTextFromPdf(pdf) {
+  var promises = [];
+  for (var i = 1; i <= pdf.numPages; i++) {
+    promises.push(
+      pdf.getPage(i).then(function(page) {
+        return page.getTextContent();
+      }).then(function(content) {
+        return content.items.map(function(item) { return item.str; }).join(' ');
+      })
+    );
+  }
+  return Promise.all(promises).then(function(pages) {
+    return pages.join('\n');
+  });
+}
+
+function findAmountInText(text) {
+  // Szukamy kwot w formatach typowych dla IAAI/Copart:
+  // "Total" / "Amount Due" / "Total Due" / "Winning Bid" / "Purchase Price" + kwota
+  // Formaty: $12,500.00 / 12500.00 / 12,500 / USD 12500
+  var patterns = [
+    // "Total Due: $12,500.00" / "Amount Due $12,500"
+    /(?:total\s*(?:due|amount|price|charge)|amount\s*due|winning\s*bid|purchase\s*price|final\s*bid|hammer\s*price|vehicle\s*price|sale\s*price)\s*[:\-]?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i,
+    // "$12,500.00" standalone z kontekstem dolara
+    /\$\s*([\d,]+(?:\.\d{2})?)/g,
+    // "12,500.00 USD"
+    /([\d,]+(?:\.\d{2})?)\s*USD/gi
+  ];
+
+  // Najpierw szukaj wzorców z kontekstem (bardziej precyzyjne)
+  var match = text.match(patterns[0]);
+  if (match) {
+    var val = parseFloat(match[1].replace(/,/g, ''));
+    if (val > 100 && val < 500000) return val; // sensowny zakres dla auta
+  }
+
+  // Fallback: znajdź największą kwotę $ w dokumencie
+  var allDollar = [];
+  var re = /\$\s*([\d,]+(?:\.\d{2})?)/g;
+  var m;
+  while ((m = re.exec(text)) !== null) {
+    var v = parseFloat(m[1].replace(/,/g, ''));
+    if (v > 100 && v < 500000) allDollar.push(v);
+  }
+  // Też szukaj "USD"
+  var reUsd = /([\d,]+(?:\.\d{2})?)\s*USD/gi;
+  while ((m = reUsd.exec(text)) !== null) {
+    var v2 = parseFloat(m[1].replace(/,/g, ''));
+    if (v2 > 100 && v2 < 500000) allDollar.push(v2);
+  }
+
+  if (allDollar.length > 0) {
+    // Zwróć największą — to prawdopodobnie total
+    allDollar.sort(function(a, b) { return b - a; });
+    return allDollar[0];
+  }
+
+  return null;
+}
+
+function showPdfConfirm(amount) {
+  setPdfStatus('success', 'Wykryto kwotę w PDF');
+  document.getElementById('pdfExtractedAmount').value = amount;
+  document.getElementById('pdfConfirm').style.display = '';
+  document.getElementById('pdfManualEntry').style.display = 'none';
+}
+
+function showPdfManualEntry() {
+  setPdfStatus('warning', 'Nie udało się automatycznie odczytać kwoty');
+  document.getElementById('pdfConfirm').style.display = 'none';
+  document.getElementById('pdfManualEntry').style.display = '';
+}
+
+function applyWinningBid(amount) {
+  state.winningBidUsd = amount;
+  state.winningBidFromCrm = true;
+  document.getElementById('winningBid').value = amount;
+  document.getElementById('winningBidSource').textContent = 'z pliku wyliczenia';
+  document.getElementById('winningBidSource').style.display = '';
+  state.commissionManual = null;
+  document.getElementById('pdfConfirm').style.display = 'none';
+  document.getElementById('pdfManualEntry').style.display = 'none';
+  setPdfStatus('success', 'Kwota zatwierdzona: ' + fmtUsd(amount));
+  updateUI();
+}
+
+// ============================================================
+//  CALCULATIONS
+// ============================================================
+function getDepositPercent() {
+  if (state.auctionSource === 'copart') return CONFIG.DEPOSIT_COPART_PERCENT;
+  if (state.auctionSource === 'iaai') return CONFIG.DEPOSIT_IAAI_PERCENT;
+  return CONFIG.DEPOSIT_IAAI_PERCENT; // default
+}
+
+function calcEqualization() {
+  var pct = getDepositPercent();
+  var reqUsd = state.auctionPriceUsd * (pct / 100);
+  var reqPln = reqUsd * state.usdPlnRate;
+  var eq = Math.max(0, reqPln - state.depositPaid);
+  return { requiredUsd: reqUsd, requiredPln: reqPln, equalization: Math.round(eq) };
+}
+
+function calcCommission(usd) {
+  for (var i = 0; i < state.tiers.length; i++) {
+    var t = state.tiers[i];
+    if (usd <= t.max) {
+      if (t.fee !== undefined && t.fee !== null) return t.fee;
+      if (t.percent !== undefined && t.percent !== null) return Math.round(usd * state.usdPlnRate * t.percent / 100);
+      return 0;
+    }
+  }
+  return 0;
+}
+
+function getActiveTierIdx(usd) {
+  if (!usd || usd <= 0) return -1;
+  for (var i = 0; i < state.tiers.length; i++) {
+    if (usd <= state.tiers[i].max) return i;
+  }
+  return state.tiers.length - 1;
+}
+
+// ============================================================
+//  FORMAT
+// ============================================================
+function fmtPln(v) { return Number(v).toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' PLN'; }
+function fmtUsd(v) { return Number(v).toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' $'; }
+
+// ============================================================
+//  UI UPDATE
+// ============================================================
+function updateUI() {
+  // Auction price
+  document.getElementById('auctionPriceDisplay').textContent = state.auctionPriceUsd ? fmtUsd(state.auctionPriceUsd) : '—';
+
+  // Source badge
+  var badge = document.getElementById('auctionSourceBadge');
+  var pctLabel = document.getElementById('auctionSourcePercent');
+  badge.className = 'badge';
+  if (state.auctionSource === 'iaai') {
+    badge.textContent = 'IAAI.com';
+    badge.classList.add('iaai');
+    pctLabel.textContent = '(depozyt ' + CONFIG.DEPOSIT_IAAI_PERCENT + '%)';
+  } else if (state.auctionSource === 'copart') {
+    badge.textContent = 'Copart';
+    badge.classList.add('copart');
+    pctLabel.textContent = '(depozyt ' + CONFIG.DEPOSIT_COPART_PERCENT + '%)';
+  } else {
+    badge.textContent = 'Nieznane';
+    badge.classList.add('unknown');
+    pctLabel.textContent = '';
+  }
+
+  // Equalization
+  var eq = calcEqualization();
+  state.equalizationCalc = eq.equalization;
+  document.getElementById('requiredDepositUsd').textContent = fmtUsd(Math.round(eq.requiredUsd));
+  document.getElementById('requiredDepositPln').textContent = fmtPln(Math.round(eq.requiredPln));
+  document.getElementById('depositPercentHint').textContent = getDepositPercent() + '% × ' + fmtUsd(state.auctionPriceUsd) + ' × ' + state.usdPlnRate;
+
+  var eqInput = document.getElementById('equalizationAmount');
+  if (state.equalizationManual === null) eqInput.value = eq.equalization;
+  var eqDisp = state.equalizationManual !== null ? state.equalizationManual : eq.equalization;
+
+  var eqHint = document.getElementById('equalizationHint');
+  if (state.equalizationManual !== null && state.equalizationManual !== eq.equalization) {
+    eqHint.textContent = 'Wyliczona: ' + fmtPln(eq.equalization);
+    eqHint.style.display = '';
+  } else {
+    eqHint.style.display = 'none';
+  }
+  document.getElementById('equalizationResult').textContent = fmtPln(eqDisp);
+
+  // Commission
+  var commCalc = calcCommission(state.winningBidUsd);
+  state.commissionCalc = commCalc;
+  var commInput = document.getElementById('commissionAmount');
+  if (state.commissionManual === null) commInput.value = commCalc;
+  var commDisp = state.commissionManual !== null ? state.commissionManual : commCalc;
+
+  var commHint = document.getElementById('commissionHint');
+  if (state.commissionManual !== null && state.commissionManual !== commCalc) {
+    commHint.textContent = 'Wyliczona: ' + fmtPln(commCalc);
+    commHint.style.display = '';
+  } else {
+    commHint.style.display = 'none';
+  }
+  document.getElementById('commissionResult').textContent = fmtPln(commDisp);
+
+  // Tier highlighting
+  var activeIdx = getActiveTierIdx(state.winningBidUsd);
+  document.querySelectorAll('.tier-row-item').forEach(function(el, i) {
+    el.classList.toggle('active-tier', i === activeIdx);
+  });
+
+  // Summary
+  document.getElementById('depositDisplay').textContent = fmtPln(state.depositPaid);
+  document.getElementById('sumDeposit').textContent = fmtPln(state.depositPaid);
+  document.getElementById('sumEqualization').textContent = fmtPln(eqDisp);
+  document.getElementById('sumCommission').textContent = fmtPln(commDisp);
+  document.getElementById('sumTotal').textContent = fmtPln(eqDisp + commDisp);
+}
+
+// ============================================================
+//  TIER PANEL RENDER
+// ============================================================
+function renderTierPanel() {
+  var container = document.getElementById('tierRows');
+  container.innerHTML = '';
+  state.tiers.forEach(function(t, i) {
+    var div = document.createElement('div');
+    div.className = 'tier-row tier-row-item';
+    var isPercent = (t.percent !== undefined && t.percent !== null);
+    div.innerHTML =
+      '<span class="tier-label">' + (t.label || 'Próg ' + (i + 1)) + '</span>' +
+      (isPercent
+        ? '<input type="number" step="0.1" min="0" value="' + t.percent + '" data-idx="' + i + '" data-field="percent"><span class="tier-unit">%</span>'
+        : '<input type="number" step="100" min="0" value="' + (t.fee || 0) + '" data-idx="' + i + '" data-field="fee"><span class="tier-unit">PLN</span>'
+      );
+    container.appendChild(div);
+  });
+  // Bind tier input changes
+  container.querySelectorAll('input').forEach(function(inp) {
+    inp.addEventListener('input', function() {
+      var idx = parseInt(this.dataset.idx);
+      var field = this.dataset.field;
+      state.tiers[idx][field] = parseFloat(this.value) || 0;
+      state.commissionManual = null;
+      saveTiersToDeal();
+      updateUI();
+    });
+  });
+}
+
+// ============================================================
+//  SELECT OFFER
+// ============================================================
+function selectOffer(offerId) {
+  var offer = state.offers.find(function(o) { return o.id === offerId; });
+  if (!offer) return;
+  state.selectedOffer = offer;
+  state.auctionPriceUsd = offer.estPrice;  // szacowana kwota → depozyt
+  state.auctionSource = offer.source || '';
+
+  // Kwota wygranej — z CRM jeśli etap 'won'
+  if (offer.stage === 'won' && offer.winPrice > 0) {
+    state.winningBidUsd = offer.winPrice;
+    state.winningBidFromCrm = true;
+    document.getElementById('winningBid').value = offer.winPrice;
+  } else {
+    state.winningBidFromCrm = false;
+  }
+
+  state.equalizationManual = null;
+  state.commissionManual = null;
+
+  document.getElementById('offerDetails').style.display = '';
+  updateUI();
+}
+
+function renderOffers(offers) {
+  document.getElementById('offerLoading').style.display = 'none';
+  document.getElementById('offerContent').style.display = '';
+  if (!offers || offers.length === 0) {
+    document.getElementById('offerNoOffers').style.display = '';
+    return;
+  }
+  state.offers = offers;
+  var sel = document.getElementById('offerSelect');
+  sel.innerHTML = '';
+  if (offers.length > 1) {
+    var ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = '— Wybierz ofertę —';
+    ph.disabled = true;
+    ph.selected = true;
+    sel.appendChild(ph);
+  }
+  offers.forEach(function(o) {
+    var opt = document.createElement('option');
+    opt.value = o.id;
+    var srcTag = o.source ? ' [' + o.source.toUpperCase() + ']' : '';
+    var stageTag = o.stage === 'won' ? ' ✓ WYGRANA' : '';
+    opt.textContent = o.title + ' — ' + fmtUsd(o.estPrice) + srcTag + stageTag;
+    sel.appendChild(opt);
+  });
+  document.getElementById('offerSelection').style.display = '';
+  if (offers.length === 1) {
+    sel.value = offers[0].id;
+    selectOffer(offers[0].id);
+  }
+}
+
+// ============================================================
+//  EVENT LISTENERS
+// ============================================================
+function setup() {
+  document.getElementById('offerSelect').addEventListener('change', function() {
+    selectOffer(parseInt(this.value));
+  });
+
+  document.getElementById('depositEditBtn').addEventListener('click', function() {
+    var inp = document.getElementById('depositPaid');
+    var disp = document.getElementById('depositDisplay');
+    var suf = document.getElementById('depositSuf');
+    var editing = inp.style.display !== 'none';
+    if (editing) {
+      // confirm edit
+      inp.style.display = 'none';
+      suf.style.display = 'none';
+      disp.style.display = '';
+      this.innerHTML = '&#9998;';
+      this.title = 'Edytuj zadatek';
+    } else {
+      // open edit
+      inp.style.display = '';
+      suf.style.display = '';
+      disp.style.display = 'none';
+      inp.focus();
+      this.innerHTML = '&#10003;';
+      this.title = 'Zatwierdź';
+    }
+  });
+
+  document.getElementById('depositPaid').addEventListener('input', function() {
+    state.depositPaid = parseFloat(this.value) || 0;
+    state.equalizationManual = null;
+    updateUI();
+  });
+
+  document.getElementById('usdPlnRate').addEventListener('input', function() {
+    state.usdPlnRate = parseFloat(this.value) || 1;
+    state.equalizationManual = null;
+    state.commissionManual = null;
+    document.getElementById('rateSrcHint').textContent = 'ręczny';
+    updateUI();
+  });
+
+  document.getElementById('rateRefreshBtn').addEventListener('click', function() {
+    fetchNbpRate();
+  });
+
+  document.getElementById('equalizationAmount').addEventListener('input', function() {
+    var v = parseFloat(this.value) || 0;
+    state.equalizationManual = (v !== state.equalizationCalc) ? v : null;
+    updateUI();
+  });
+
+  document.getElementById('winningBid').addEventListener('input', function() {
+    state.winningBidUsd = parseFloat(this.value) || 0;
+    state.commissionManual = null;
+    updateUI();
+  });
+
+  document.getElementById('commissionAmount').addEventListener('input', function() {
+    var v = parseFloat(this.value) || 0;
+    state.commissionManual = (v !== state.commissionCalc) ? v : null;
+    updateUI();
+  });
+
+  document.getElementById('tierToggle').addEventListener('click', function() {
+    document.getElementById('tierPanel').classList.toggle('open');
+  });
+
+  // PDF extraction buttons
+  document.getElementById('pdfAcceptBtn').addEventListener('click', function() {
+    var amount = parseFloat(document.getElementById('pdfExtractedAmount').value) || 0;
+    if (amount > 0) applyWinningBid(amount);
+  });
+
+  document.getElementById('pdfRejectBtn').addEventListener('click', function() {
+    showPdfManualEntry();
+  });
+
+  document.getElementById('pdfManualAcceptBtn').addEventListener('click', function() {
+    var amount = parseFloat(document.getElementById('pdfManualAmount').value) || 0;
+    if (amount > 0) applyWinningBid(amount);
+  });
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+function init() {
+  renderTierPanel();
+  setup();
+  updateUI();
+
+  // Fetch NBP rate on load
+  fetchNbpRate();
+
+  if (CONFIG.MOCK_MODE) {
+    document.getElementById('mockBanner').style.display = 'block';
+    loadOffers().then(renderOffers);
+    // Symulacja pliku PDF z kwotą
+    document.getElementById('pdfSection').style.display = '';
+    document.getElementById('pdfFileName').textContent = 'mock_settlement.pdf';
+    showPdfConfirm(8750);
+    return;
+  }
+
+  // Bitrix24 iframe — SDK init
+  BX24.init(function() {
+    var info = BX24.placement.info();
+    state.dealId = info && info.options ? info.options.ID : null;
+    if (state.dealId) {
+      loadDealData();
+      loadOffers().then(renderOffers).catch(function() { renderOffers([]); });
+    } else {
+      renderOffers([]);
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Instalacja — MrFrik Rozliczenie</title>
+  <script src="//api.bitrix24.com/api/v1/"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; text-align: center; color: #333; }
+    h1 { font-size: 20px; margin-bottom: 20px; }
+    #status { font-size: 14px; color: #666; }
+    .ok { color: #34b251; }
+    .err { color: #e53935; }
+  </style>
+</head>
+<body>
+<h1>MrFrik — Rozliczenie transakcji</h1>
+<div id="status">Instalacja...</div>
+
+<script>
+BX24.init(function() {
+
+  // ================================================================
+  //  KONFIGURACJA PLACEMENTÓW
+  //  Zmień BASE_URL na adres, gdzie hostujesz pliki
+  // ================================================================
+  var BASE_URL = 'https://TWOJ-SERWER.pl/frik';
+
+  var placements = [
+    {
+      placement: 'CRM_DEAL_DETAIL_TAB',
+      handler:   BASE_URL + '/zakladka-rozliczenie-v2.html',
+      title:     'Rozliczenie'
+    }
+  ];
+
+  // ================================================================
+  //  SMART DIFF — dodaje/aktualizuje/usuwa tylko to co trzeba
+  // ================================================================
+  var statusEl = document.getElementById('status');
+
+  BX24.callMethod('placement.get', {}, function(result) {
+    if (result.error()) {
+      statusEl.innerHTML = '<span class="err">Błąd pobierania placementów: ' + result.error() + '</span>';
+      BX24.installFinish();
+      return;
+    }
+
+    var existing = result.data();
+    var existingMap = {};
+    existing.forEach(function(item) {
+      existingMap[item.placement + '|' + item.handler] = item.title;
+    });
+
+    var configMap = {};
+    placements.forEach(function(c) {
+      configMap[c.placement + '|' + c.handler] = true;
+    });
+
+    var toAdd = [], toUpdate = [], toRemove = [];
+
+    placements.forEach(function(config) {
+      var key = config.placement + '|' + config.handler;
+      if (!(key in existingMap))                    toAdd.push(config);
+      else if (existingMap[key] !== config.title)   toUpdate.push(config);
+    });
+
+    existing.forEach(function(item) {
+      if (!(item.placement + '|' + item.handler in configMap)) {
+        toRemove.push(item);
+      }
+    });
+
+    var total = toAdd.length + toUpdate.length + toRemove.length;
+    if (total === 0) {
+      statusEl.innerHTML = '<span class="ok">✓ Wszystko aktualne, brak zmian.</span>';
+      BX24.installFinish();
+      return;
+    }
+
+    var completed = 0;
+    var errors = [];
+
+    function check() {
+      completed++;
+      if (completed === total) {
+        if (errors.length > 0) {
+          statusEl.innerHTML = '<span class="err">Błędy: ' + errors.join(', ') + '</span>';
+        } else {
+          statusEl.innerHTML = '<span class="ok">✓ Zainstalowano pomyślnie! (' +
+            toAdd.length + ' dodano, ' + toUpdate.length + ' zaktualizowano, ' +
+            toRemove.length + ' usunięto)</span>';
+        }
+        BX24.installFinish();
+      }
+    }
+
+    toAdd.forEach(function(p) {
+      BX24.callMethod('placement.bind', p, function(r) {
+        if (r.error()) errors.push('bind: ' + r.error());
+        check();
+      });
+    });
+
+    toUpdate.forEach(function(p) {
+      BX24.callMethod('placement.unbind', { placement: p.placement, handler: p.handler }, function() {
+        BX24.callMethod('placement.bind', p, function(r) {
+          if (r.error()) errors.push('update: ' + r.error());
+          check();
+        });
+      });
+    });
+
+    toRemove.forEach(function(item) {
+      BX24.callMethod('placement.unbind', { placement: item.placement, handler: item.handler }, function(r) {
+        if (r.error()) errors.push('unbind: ' + r.error());
+        check();
+      });
+    });
+  });
+});
+</script>
+</body>
+</html>
