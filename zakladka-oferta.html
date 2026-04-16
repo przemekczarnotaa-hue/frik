@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wprowadź dane auta — MrFrik</title>
+  <script src="//api.bitrix24.com/api/v1/"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    :root {
+      --blue: #2fc6f6;
+      --blue-dark: #0b66c2;
+      --bg: #f5f7fa;
+      --card: #fff;
+      --border: #e0e4ea;
+      --text: #333;
+      --text-muted: #888;
+      --green: #34b251;
+      --orange: #f0a020;
+      --red: #e53935;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+    .card h2 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--blue-dark);
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--blue);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .step {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--blue-dark);
+      color: #fff;
+      font-size: 11px; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+    .row:last-child { margin-bottom: 0; }
+    .row label { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+    .row .val   { font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+    /* URL input */
+    .url-row { display: flex; gap: 8px; align-items: stretch; }
+    .url-row input {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 7px 10px;
+      font-size: 13px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color .2s;
+    }
+    .url-row input:focus { border-color: var(--blue); }
+
+    .btn {
+      padding: 7px 16px;
+      font-size: 13px;
+      border: none;
+      border-radius: 5px;
+      background: var(--blue-dark);
+      color: #fff;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 600;
+      transition: background .15s;
+      white-space: nowrap;
+    }
+    .btn:hover  { background: #0955a8; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn.secondary {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-weight: 500;
+    }
+    .btn.secondary:hover { background: var(--bg); }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px; font-weight: 700;
+    }
+    .badge.iaai   { background: #fff3cd; color: #856404; }
+    .badge.copart { background: #d4edda; color: #155724; }
+    .badge.pdf    { background: #e8f4fd; color: #0b66c2; }
+
+    /* Loading */
+    .loading-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 16px;
+      gap: 12px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--blue-dark);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Photo gallery */
+    .photo-gallery {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .photo-gallery img {
+      width: 110px;
+      height: 78px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: transform .15s;
+    }
+    .photo-gallery img:hover { transform: scale(1.04); }
+    .no-photos {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-style: italic;
+      margin-bottom: 10px;
+    }
+
+    /* Data grid */
+    .data-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+      margin-bottom: 14px;
+    }
+    .data-grid .drow { display: flex; flex-direction: column; gap: 2px; }
+    .data-grid .dlabel { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+    .data-grid .dvalue { font-size: 13px; font-weight: 500; color: var(--text); word-break: break-word; }
+    .data-grid .dvalue.vin { font-family: monospace; font-size: 12px; letter-spacing: .5px; }
+
+    /* Action row */
+    .action-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    /* Status chips */
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .status-chip.loading { background: #e8f4fd; color: #0b66c2; }
+    .status-chip.success { background: #eef8ee; color: #34b251; }
+    .status-chip.error   { background: #fdecea; color: #e53935; }
+    .status-chip.warning { background: #fff8e8; color: #b8860b; }
+
+    /* Error card */
+    .error-box {
+      background: #fff8e8;
+      border: 1px solid #f0d89a;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: #856404;
+    }
+    .error-box strong { display: block; margin-bottom: 4px; color: var(--orange); }
+
+    /* PDF drop zone */
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--blue);
+      background: #f0f8ff;
+    }
+    .drop-zone .dz-icon  { font-size: 28px; margin-bottom: 6px; }
+    .drop-zone .dz-title { font-size: 13px; font-weight: 600; }
+    .drop-zone .dz-sub   { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    /* Saved success */
+    .saved-wrap {
+      text-align: center;
+      padding: 28px 16px;
+    }
+    .saved-wrap .ok-icon { font-size: 40px; margin-bottom: 8px; }
+    .saved-wrap .ok-text { font-size: 16px; font-weight: 700; color: var(--green); margin-bottom: 6px; }
+    .saved-wrap .ok-sub  { font-size: 12px; color: var(--text-muted); }
+
+    .hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .hint.err { color: var(--red); }
+
+    @media (max-width: 520px) {
+      .data-grid { grid-template-columns: 1fr; }
+      .url-row    { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══════════════════════════════════════════════════════════
+       KARTA WEJŚCIOWA — wklej link
+  ══════════════════════════════════════════════════════════ -->
+  <div class="card" id="inputCard">
+    <h2><span class="step">1</span> Pobierz dane auta z aukcji</h2>
+
+    <div class="row">
+      <label>Link do aukcji (IAAI lub Copart)</label>
+      <div class="url-row">
+        <input type="url" id="auctionUrl"
+               placeholder="https://www.iaai.com/... lub https://www.copart.com/lot/..."
+               autocomplete="off" spellcheck="false">
+        <button class="btn" id="fetchBtn" onclick="fetchData()">Pobierz dane</button>
+      </div>
+      <div class="hint" id="inputHint">Wklej link do wybranego auta, a system automatycznie pobierze wszystkie informacje.</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       ŁADOWANIE
+  ══════════════════════════════════════════════════════════ -->
+  <div class="card" id="loadingCard" style="display:none;">
+    <div class="loading-wrap">
+      <div class="spinner"></div>
+      <div id="loadingText">Pobieram dane z aukcji…</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PODGLĄD POBRANYCH DANYCH
+  ══════════════════════════════════════════════════════════ -->
+  <div class="card" id="previewCard" style="display:none;">
+    <h2>
+      <span class="step">2</span>
+      <span id="previewTitle">Dane pojazdu</span>
+      <span id="sourceBadge" class="badge" style="margin-left:4px;"></span>
+    </h2>
+
+    <div class="photo-gallery" id="photoGallery"></div>
+    <div class="no-photos"     id="noPhotos"    style="display:none;">Brak zdjęć do wyświetlenia</div>
+
+    <div class="data-grid" id="dataGrid"></div>
+
+    <div class="action-row">
+      <button class="btn"           id="saveBtn"   onclick="saveToQuote()">Zapisz do oferty</button>
+      <button class="btn secondary" id="resetBtn"  onclick="resetForm()">Wyczyść</button>
+      <span   id="saveStatus" style="display:none;"></span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       BŁĄD + FALLBACK PDF
+  ══════════════════════════════════════════════════════════ -->
+  <div class="card" id="errorCard" style="display:none;">
+    <h2>⚠ Nie można pobrać danych automatycznie</h2>
+
+    <div class="error-box">
+      <strong id="errorTitle">Błąd pobierania</strong>
+      <span   id="errorDetail"></span>
+    </div>
+
+    <div class="row">
+      <label>Co zrobić?</label>
+      <p style="font-size:12px; color:var(--text-muted); line-height:1.6; margin-bottom:10px;">
+        Otwórz stronę aukcji, zaloguj się, a następnie wciśnij <strong>Ctrl+P → Zapisz jako PDF</strong>
+        i wgraj plik poniżej. System odczyta dane z PDF automatycznie.
+      </p>
+      <button class="btn secondary" id="openUrlBtn" style="width:fit-content;">Otwórz stronę aukcji →</button>
+    </div>
+
+    <div style="margin-top:12px;">
+      <label style="font-size:11px; font-weight:500; color:var(--text-muted); display:block; margin-bottom:6px;">
+        Lub wgraj zapisany PDF:
+      </label>
+      <div class="drop-zone" id="pdfDropZone"
+           onclick="document.getElementById('pdfInput').click()"
+           ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <div class="dz-icon">📄</div>
+        <div class="dz-title">Kliknij lub przeciągnij plik PDF</div>
+        <div class="dz-sub">Obsługiwane: PDF ze strony IAAI lub Copart</div>
+      </div>
+      <input type="file" id="pdfInput" accept=".pdf" style="display:none;"
+             onchange="handlePdfFile(this.files[0])">
+      <div id="pdfStatus" style="margin-top:8px; display:none;"></div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <button class="btn secondary" onclick="resetForm()" style="font-size:12px;">← Wróć do wklejania linku</button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       POTWIERDZENIE ZAPISU
+  ══════════════════════════════════════════════════════════ -->
+  <div class="card" id="savedCard" style="display:none;">
+    <div class="saved-wrap">
+      <div class="ok-icon">✅</div>
+      <div class="ok-text">Dane zapisane do oferty!</div>
+      <div class="ok-sub" id="savedSummary"></div>
+      <button class="btn secondary" style="margin-top:14px;" onclick="resetForm()">Dodaj dane dla innego auta</button>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════════
+//  KONFIGURACJA
+// ═══════════════════════════════════════════════════════════════════
+const CFG = {
+  // URL scrapera na serwerze (przez nginx proxy)
+  SCRAPER_URL: 'https://klienci.przemek.czarnota.info/api/frik-scraper',
+  // Ten sam klucz co w .env na serwerze
+  SCRAPER_API_KEY: 'zmien-na-silny-klucz-tutaj',
+  // Znane pola w encji Oferta
+  QUOTE_EST_PRICE_FIELD:  'UF_CRM_QUOTE_1749798603485',
+  QUOTE_SOURCE_FIELD:     'UF_CRM_QUOTE_1775199244953',
+  SOURCE_ENUM_IAAI:       3089,
+  SOURCE_ENUM_COPART:     3091,
+};
+
+// ═══════════════════════════════════════════════════════════════════
+//  STAN
+// ═══════════════════════════════════════════════════════════════════
+let quoteId         = null;
+let currentData     = null;
+let currentSource   = null;
+let currentAuctionUrl = null;
+
+// ═══════════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════════
+BX24.init(function () {
+  const info = BX24.getPlacementInfo();
+  quoteId = info && info.options && (info.options.ID || info.options.id);
+  // allow Enter key in URL field
+  document.getElementById('auctionUrl').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') fetchData();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  GŁÓWNA FUNKCJA — pobierz dane ze scrapera
+// ═══════════════════════════════════════════════════════════════════
+async function fetchData() {
+  const urlVal = document.getElementById('auctionUrl').value.trim();
+  if (!urlVal) { setHint('Wklej link do aukcji', true); return; }
+
+  let parsed;
+  try { parsed = new URL(urlVal); } catch {
+    setHint('Nieprawidłowy URL — sprawdź link', true);
+    return;
+  }
+  const host = parsed.hostname.replace(/^www\./, '');
+  if (host !== 'iaai.com' && !host.endsWith('.iaai.com') &&
+      host !== 'copart.com' && !host.endsWith('.copart.com')) {
+    setHint('Obsługiwane tylko iaai.com i copart.com', true);
+    return;
+  }
+
+  currentAuctionUrl = urlVal;
+  const siteName = host.includes('iaai') ? 'IAAI' : 'Copart';
+
+  showLoading(`Pobieram dane z ${siteName}…`);
+
+  try {
+    const resp = await fetch(CFG.SCRAPER_URL + '/api/scrape', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': CFG.SCRAPER_API_KEY,
+      },
+      body: JSON.stringify({ url: urlVal }),
+    });
+
+    const result = await resp.json();
+
+    if (!resp.ok || !result.success) {
+      throw new Error(result.error || `Błąd serwera (${resp.status})`);
+    }
+
+    currentData   = result.data;
+    currentSource = result.source;
+    showPreview(result.data, result.source);
+
+  } catch (err) {
+    console.error('[frik-scraper]', err);
+    showError(err.message, siteName);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  WIDOKI
+// ═══════════════════════════════════════════════════════════════════
+function showLoading(text) {
+  hide('inputCard'); hide('previewCard'); hide('errorCard'); hide('savedCard');
+  byId('loadingText').textContent = text || 'Pobieram dane…';
+  show('loadingCard');
+}
+
+function showPreview(data, source) {
+  hide('loadingCard'); hide('errorCard');
+
+  // Title
+  const title = data.vehicleTitle ||
+    [data.year, data.make, data.model].filter(Boolean).join(' ') ||
+    'Pojazd';
+  byId('previewTitle').textContent = title;
+
+  // Badge
+  const badge = byId('sourceBadge');
+  badge.textContent = source;
+  badge.className = 'badge ' + source.toLowerCase();
+
+  // Photos
+  const gallery = byId('photoGallery');
+  gallery.innerHTML = '';
+  const photos = (data.images || []).slice(0, 10);
+  if (photos.length > 0) {
+    hide('noPhotos');
+    photos.forEach(url => {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = title;
+      img.title = 'Kliknij aby otworzyć';
+      img.onclick = () => window.open(url, '_blank');
+      img.onerror = () => { img.style.display = 'none'; };
+      gallery.appendChild(img);
+    });
+    show('photoGallery');
+  } else {
+    show('noPhotos');
+    hide('photoGallery');
+  }
+
+  // Data grid
+  const rows = [
+    ['VIN',                  data.vin,           'vin'],
+    ['Numer lotu',           data.lotNumber,     ''],
+    ['Rok',                  data.year,          ''],
+    ['Marka',                data.make,          ''],
+    ['Model',                data.model,         ''],
+    ['Przebieg',             data.odometer ? fmtOdo(data.odometer) : null, ''],
+    ['Uszkodzenie główne',   data.primaryDamage,   ''],
+    ['Uszkodzenie dodatkowe',data.secondaryDamage, ''],
+    ['Czy jeździ',           data.runDrive,        ''],
+    ['Lokalizacja',          data.location,        ''],
+    ['Data licytacji',       data.saleDate,        ''],
+    ['Szacowana wartość',    data.estimatedValue ? '$' + fmtNum(data.estimatedValue) : null, ''],
+  ].filter(([, v]) => v != null && v !== '');
+
+  byId('dataGrid').innerHTML = rows.map(([label, val, cls]) => `
+    <div class="drow">
+      <span class="dlabel">${esc(label)}</span>
+      <span class="dvalue ${cls}">${esc(String(val))}</span>
+    </div>`).join('');
+
+  hide('inputCard');
+  show('previewCard');
+}
+
+function showError(message, siteName) {
+  hide('loadingCard'); hide('previewCard');
+
+  byId('errorTitle').textContent  = `Nie udało się pobrać danych z ${siteName || 'aukcji'}`;
+  byId('errorDetail').textContent = message;
+  byId('openUrlBtn').onclick = () => currentAuctionUrl && window.open(currentAuctionUrl, '_blank');
+  if (!currentAuctionUrl) byId('openUrlBtn').style.display = 'none';
+  else byId('openUrlBtn').style.display = '';
+
+  show('inputCard');
+  show('errorCard');
+}
+
+function resetForm() {
+  currentData = currentSource = currentAuctionUrl = null;
+  byId('auctionUrl').value = '';
+  byId('pdfInput').value   = '';
+  byId('inputHint').textContent = 'Wklej link do wybranego auta, a system automatycznie pobierze wszystkie informacje.';
+  byId('inputHint').className = 'hint';
+  byId('pdfStatus').style.display = 'none';
+  hide('previewCard'); hide('errorCard'); hide('savedCard'); hide('loadingCard');
+  show('inputCard');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ZAPIS DO OFERTY (crm.quote.update)
+// ═══════════════════════════════════════════════════════════════════
+function saveToQuote() {
+  if (!currentData) return;
+  if (!quoteId) {
+    setSaveStatus('Brak ID oferty — otwórz zakładkę z poziomu oferty w Bitrix24', 'error');
+    return;
+  }
+
+  byId('saveBtn').disabled = true;
+  setSaveStatus('Zapisuję…', 'loading');
+
+  const d      = currentData;
+  const source = currentSource;
+
+  // Build title
+  const title = d.vehicleTitle ||
+    [d.year, d.make, d.model].filter(Boolean).join(' ') ||
+    'Auto z aukcji';
+
+  // Build formatted notes (goes into COMMENTS field)
+  const lines = [
+    `=== Dane pojazdu z ${source} ===`,
+    d.vin         ? `VIN: ${d.vin}`                             : null,
+    d.lotNumber   ? `Lot: ${d.lotNumber}`                       : null,
+    '',
+    d.year        ? `Rok: ${d.year}`                            : null,
+    d.make        ? `Marka: ${d.make}`                          : null,
+    d.model       ? `Model: ${d.model}`                         : null,
+    d.odometer    ? `Przebieg: ${fmtOdo(d.odometer)}`           : null,
+    '',
+    d.primaryDamage   ? `Uszkodzenie główne: ${d.primaryDamage}`     : null,
+    d.secondaryDamage ? `Uszkodzenie dodatkowe: ${d.secondaryDamage}` : null,
+    d.runDrive    ? `Czy jeździ: ${d.runDrive}`                 : null,
+    '',
+    d.location    ? `Lokalizacja: ${d.location}`                : null,
+    d.saleDate    ? `Data licytacji: ${d.saleDate}`             : null,
+    d.estimatedValue ? `Szacowana wartość: $${fmtNum(d.estimatedValue)}` : null,
+    '',
+    currentAuctionUrl ? `Link aukcji (wewnętrzny): ${currentAuctionUrl}` : null,
+    '',
+    d.images && d.images.length > 0
+      ? `Zdjęcia:\n${d.images.slice(0, 10).join('\n')}`
+      : null,
+  ].filter(Boolean);
+
+  const fields = {
+    TITLE:    title,
+    COMMENTS: lines.join('\n'),
+  };
+
+  if (d.estimatedValue) {
+    fields['OPPORTUNITY']              = d.estimatedValue;
+    fields['CURRENCY_ID']              = 'USD';
+    fields[CFG.QUOTE_EST_PRICE_FIELD]  = { VALUE: String(d.estimatedValue), CURRENCY: 'USD' };
+  }
+  if (source === 'IAAI')   fields[CFG.QUOTE_SOURCE_FIELD] = CFG.SOURCE_ENUM_IAAI;
+  if (source === 'Copart') fields[CFG.QUOTE_SOURCE_FIELD] = CFG.SOURCE_ENUM_COPART;
+
+  BX24.callMethod('crm.quote.update', { id: quoteId, fields }, function (result) {
+    byId('saveBtn').disabled = false;
+    if (result.error()) {
+      const msg = result.error().ex ? result.error().ex.error_description : String(result.error());
+      setSaveStatus('Błąd: ' + msg, 'error');
+    } else {
+      showSavedConfirmation(title);
+    }
+  });
+}
+
+function showSavedConfirmation(title) {
+  hide('previewCard');
+  byId('savedSummary').textContent = title;
+  show('savedCard');
+}
+
+function setSaveStatus(text, type) {
+  const el = byId('saveStatus');
+  el.textContent = text;
+  el.className = 'status-chip ' + type;
+  el.style.display = 'inline-flex';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  PDF FALLBACK
+// ═══════════════════════════════════════════════════════════════════
+function onDragOver(e)  { e.preventDefault(); byId('pdfDropZone').classList.add('drag-over'); }
+function onDragLeave()  { byId('pdfDropZone').classList.remove('drag-over'); }
+function onDrop(e) {
+  e.preventDefault();
+  byId('pdfDropZone').classList.remove('drag-over');
+  const file = e.dataTransfer && e.dataTransfer.files[0];
+  if (file) handlePdfFile(file);
+}
+
+async function handlePdfFile(file) {
+  if (!file || file.type !== 'application/pdf') {
+    setPdfStatus('Wgraj plik PDF (.pdf)', 'error');
+    return;
+  }
+  setPdfStatus('Analizuję PDF…', 'loading');
+
+  try {
+    const buf  = await file.arrayBuffer();
+    const text = await extractTextFromPdf(buf);
+    const data = parseVehicleFromText(text);
+
+    // Detect source from known URL (if user pasted it first)
+    if (!currentSource && currentAuctionUrl) {
+      currentSource = currentAuctionUrl.includes('iaai') ? 'IAAI' : 'Copart';
+    }
+    if (!currentSource) currentSource = 'PDF';
+
+    currentData = data;
+    byId('pdfStatus').style.display = 'none';
+    showPreview(data, currentSource);
+
+  } catch (err) {
+    setPdfStatus('Błąd: ' + err.message, 'error');
+  }
+}
+
+function setPdfStatus(text, type) {
+  const el = byId('pdfStatus');
+  el.style.display = 'block';
+  el.innerHTML = `<span class="status-chip ${type}">${esc(text)}</span>`;
+}
+
+// pdf.js text extraction
+async function extractTextFromPdf(arrayBuffer) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  for (let i = 1; i <= Math.min(pdf.numPages, 6); i++) {
+    const page    = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(item => item.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+function parseVehicleFromText(text) {
+  function grab(re) {
+    const m = text.match(re);
+    return m ? m[1].trim() : null;
+  }
+
+  const vin = grab(/\b([A-HJ-NPR-Z0-9]{17})\b/);
+
+  // Year: 1980–2030
+  const yearRaw = grab(/\b(19[89]\d|20[0-3]\d)\b/);
+  const year    = yearRaw ? parseInt(yearRaw, 10) : null;
+
+  const primaryDamage   = grab(/Primary Damage[:\s]+([^\n]+)/i);
+  const secondaryDamage = grab(/Secondary Damage[:\s]+([^\n]+)/i);
+
+  const odoM    = text.match(/Odometer[:\s]*([\d,]+)\s*mi/i);
+  const odometer = odoM ? parseInt(odoM[1].replace(/,/g, ''), 10) : null;
+
+  const rdM      = text.match(/Run\s*(?:&|\/)\s*Drive[:\s]+([^\n]+)/i);
+  const runDrive = rdM ? rdM[1].trim() : null;
+
+  const locM     = text.match(/(?:Location|Yard)[:\s]+([^\n]+)/i);
+  const location = locM ? locM[1].trim() : null;
+
+  const sdM      = text.match(/Sale Date[:\s]+([^\n]+)/i);
+  const saleDate = sdM ? sdM[1].trim() : null;
+
+  const estM         = text.match(/Estimated(?:\s+Retail)?\s+Value[:\s$]*([\d,]+)/i);
+  const estimatedValue = estM ? parseInt(estM[1].replace(/,/g, ''), 10) : null;
+
+  // Lot from URL if pasted before, otherwise from text
+  let lotNumber = null;
+  if (currentAuctionUrl) {
+    const lu = currentAuctionUrl.match(/\/lot\/([0-9]+)/);
+    if (lu) lotNumber = lu[1];
+  }
+  if (!lotNumber) {
+    const lb = text.match(/Lot[:\s#]*([0-9]{6,10})/i);
+    if (lb) lotNumber = lb[1];
+  }
+
+  return {
+    vehicleTitle: null, year, make: null, model: null, vin, lotNumber,
+    primaryDamage, secondaryDamage, odometer, runDrive,
+    saleDate, location, estimatedValue, images: [],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════════
+function byId(id)         { return document.getElementById(id); }
+function show(id)         { const el = byId(id); if (el) el.style.display = ''; }
+function hide(id)         { const el = byId(id); if (el) el.style.display = 'none'; }
+function esc(s)           { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtNum(n)        { return Number(n).toLocaleString('pl-PL'); }
+function fmtOdo(n)        { return fmtNum(n) + ' mil'; }
+function setHint(t, err)  {
+  const el = byId('inputHint');
+  el.textContent = t;
+  el.className = 'hint' + (err ? ' err' : '');
+}
+</script>
+</body>
+</html>
